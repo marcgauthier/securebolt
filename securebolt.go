@@ -24,6 +24,10 @@ type SecureBolt struct {
 	mu      sync.RWMutex           // Mutex for thread safety
 }
 
+func init() {
+	memguard.CatchInterrupt()
+}
+
 func Open(filename string, mode fs.FileMode, password []byte) (*SecureBolt, error) {
 
 	// Validate inputs
@@ -96,6 +100,10 @@ func Open(filename string, mode fs.FileMode, password []byte) (*SecureBolt, erro
 	}
 	memguard.WipeBytes(password) // Securely erase the password
 
+	// Melt the key to access its bytes
+	keyLock.Melt()
+	defer keyLock.Freeze()
+
 	// Initialize AES-GCM
 	block, err := aes.NewCipher(keyLock.Bytes())
 	if err != nil {
@@ -126,6 +134,9 @@ func deriveKey(password, salt []byte) (*memguard.LockedBuffer, error) {
 	const keyLength = 32
 
 	keyLock := memguard.NewBuffer(keyLength)
+	keyLock.Melt()
+	defer keyLock.Freeze()
+
 	derivedKey := argon2.IDKey(password, salt, time, memory, threads, keyLength)
 	copy(keyLock.Bytes(), derivedKey)
 	memguard.WipeBytes(derivedKey) // Ensure the derivedKey slice is wiped
@@ -228,7 +239,7 @@ func (sb *SecureBucket) Put(key, value []byte) error {
 		value = []byte{}
 	}
 
-	encryptedValue, err := encryptData(value, sb.aead, sb.keyLock)
+	encryptedValue, err := encryptData(value, sb.aead)
 	if err != nil {
 		return err
 	}
@@ -247,7 +258,7 @@ func (sb *SecureBucket) Get(key []byte) ([]byte, error) {
 		return nil, nil
 	}
 
-	value, err := decryptData(encryptedValue, sb.aead, sb.keyLock)
+	value, err := decryptData(encryptedValue, sb.aead)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +277,7 @@ func (sb *SecureBucket) Delete(key []byte) error {
 // ForEach calls the provided function with each key and decrypted value in the bucket.
 func (sb *SecureBucket) ForEach(fn func(k, v []byte) error) error {
 	return sb.bucket.ForEach(func(k, encV []byte) error {
-		value, err := decryptData(encV, sb.aead, sb.keyLock)
+		value, err := decryptData(encV, sb.aead)
 		if err != nil {
 			return err
 		}
@@ -295,7 +306,7 @@ func (sc *SecureCursor) First() ([]byte, []byte, error) {
 	if k == nil || encV == nil {
 		return k, nil, nil
 	}
-	v, err := decryptData(encV, sc.aead, sc.keyLock)
+	v, err := decryptData(encV, sc.aead)
 	if err != nil {
 		return k, nil, fmt.Errorf("failed to decrypt value for key %q: %w", k, err)
 	}
@@ -308,7 +319,7 @@ func (sc *SecureCursor) Next() ([]byte, []byte, error) {
 	if k == nil || encV == nil {
 		return k, nil, nil // No more entries
 	}
-	v, err := decryptData(encV, sc.aead, sc.keyLock)
+	v, err := decryptData(encV, sc.aead)
 	if err != nil {
 		return k, nil, fmt.Errorf("failed to decrypt value for key %q: %w", k, err)
 	}
@@ -321,7 +332,7 @@ func (sc *SecureCursor) Prev() ([]byte, []byte, error) {
 	if k == nil || encV == nil {
 		return k, nil, nil // No more entries
 	}
-	v, err := decryptData(encV, sc.aead, sc.keyLock)
+	v, err := decryptData(encV, sc.aead)
 	if err != nil {
 		return k, nil, fmt.Errorf("failed to decrypt value for key %q: %w", k, err)
 	}
@@ -334,16 +345,14 @@ func (sc *SecureCursor) Seek(seek []byte) ([]byte, []byte, error) {
 	if k == nil || encV == nil {
 		return k, nil, nil // No matching entry
 	}
-	v, err := decryptData(encV, sc.aead, sc.keyLock)
+	v, err := decryptData(encV, sc.aead)
 	if err != nil {
 		return k, nil, fmt.Errorf("failed to decrypt value for key %q: %w", k, err)
 	}
 	return k, v, nil
 }
 
-func encryptData(data []byte, aead cipher.AEAD, keyLock *memguard.LockedBuffer) ([]byte, error) {
-	keyLock.Melt()
-	defer keyLock.Freeze()
+func encryptData(data []byte, aead cipher.AEAD) ([]byte, error) {
 
 	nonce := make([]byte, aead.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
@@ -354,9 +363,7 @@ func encryptData(data []byte, aead cipher.AEAD, keyLock *memguard.LockedBuffer) 
 }
 
 // decryptData decrypts the data using AES-GCM.
-func decryptData(encryptedData []byte, aead cipher.AEAD, keyLock *memguard.LockedBuffer) ([]byte, error) {
-	keyLock.Melt()
-	defer keyLock.Freeze()
+func decryptData(encryptedData []byte, aead cipher.AEAD) ([]byte, error) {
 
 	if encryptedData == nil {
 		return nil, nil
