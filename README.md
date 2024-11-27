@@ -1,4 +1,3 @@
-Certainly! You can download the README file by copying the content below and saving it as `README.md` in your project's root directory.
 
 ```markdown
 # SecureBolt
