@@ -20,7 +20,7 @@ To install SecureBolt, run:
 go get github.com/yourusername/securebolt
 ```
 
-Replace `github.com/yourusername/securebolt` with the actual import path of the package.
+Replace `github.com/marcgauthier/securebolt` with the actual import path of the package.
 
 ## Usage
 
