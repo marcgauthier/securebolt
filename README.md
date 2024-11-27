@@ -218,8 +218,3 @@ Contributions are welcome! Please open an issue or submit a pull request on GitH
 - [Argon2](https://github.com/P-H-C/phc-winner-argon2) for the key derivation function.
 
 ---
-
-**Disclaimer**: This package provides cryptographic functionality. While it uses strong encryption practices, it has not been audited by a security professional. Use it at your own risk and consider conducting a security review before using it in production environments.
-```
-
-After saving the content above into a file named `README.md`, you can view it with any Markdown viewer or text editor that supports Markdown formatting.
