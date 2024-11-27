@@ -24,10 +24,6 @@ type SecureBolt struct {
 	mu      sync.RWMutex           // Mutex for thread safety
 }
 
-func init() {
-	memguard.CatchInterrupt()
-}
-
 func Open(filename string, mode fs.FileMode, password []byte) (*SecureBolt, error) {
 
 	// Validate inputs
